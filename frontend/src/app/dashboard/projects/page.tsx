@@ -101,15 +101,14 @@ export default function KanbanBoardPage() {
         const pId = projRes.data[0].id;
         setProjectId(pId);
         // Fetch board data
-        const boardRes = await api.get(`/projects/${pId}/board`);
-        // Transform columns back to items for dnd-kit simplicity
+        const boardRes = await api.get(`/projects/${pId}/work-items`);
+        // The API returns an array of work items
         let fetchedItems: WorkItem[] = [];
-        if (boardRes.data.columns) {
-           Object.keys(boardRes.data.columns).forEach(colKey => {
-             boardRes.data.columns[colKey].forEach((i: any) => {
-               fetchedItems.push(i);
-             });
-           });
+        if (Array.isArray(boardRes.data)) {
+           fetchedItems = boardRes.data;
+        } else if (boardRes.data && Array.isArray(boardRes.data.data)) {
+           // In case it's paginated
+           fetchedItems = boardRes.data.data;
         }
         setItems(fetchedItems);
       }
