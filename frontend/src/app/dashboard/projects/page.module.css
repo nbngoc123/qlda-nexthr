@@ -138,3 +138,18 @@
   border-radius: var(--radius-lg);
   border: 1px dashed var(--glass-border);
 }
+
+.errorAlert {
+  background: rgba(239, 68, 68, 0.15);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  color: #ffb3b3;
+  padding: 16px;
+  border-radius: var(--radius-md);
+  font-weight: 500;
+  animation: slideDown var(--transition-fast) ease-out;
+}
+
+@keyframes slideDown {
+  from { opacity: 0; transform: translateY(-10px); }
+  to { opacity: 1; transform: translateY(0); }
+}

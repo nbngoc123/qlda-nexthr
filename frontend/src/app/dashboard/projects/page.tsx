@@ -41,7 +41,17 @@ const COLUMNS: { id: ItemStatus; title: string }[] = [
 ];
 
 // Sortable Item Component
-const SortableItem = ({ item }: { item: WorkItem }) => {
+const SortableItem = ({ item, user }: { item: WorkItem; user: any }) => {
+  let canDrag = false;
+  if (user) {
+    if (['PM', 'TEAM_LEAD', 'REVIEWER', 'ADMIN'].includes(user.role)) {
+      canDrag = true;
+    } else if (user.role === 'MEMBER') {
+      canDrag = true; // Sẽ check kỹ logic (assignee, hướng kéo) lúc Drop
+    }
+    // C_LEVEL sẽ là false
+  }
+
   const {
     attributes,
     listeners,
@@ -49,11 +59,13 @@ const SortableItem = ({ item }: { item: WorkItem }) => {
     transform,
     transition,
     isDragging
-  } = useSortable({ id: item.id });
+  } = useSortable({ id: item.id, disabled: !canDrag });
 
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
+    cursor: canDrag ? (isDragging ? 'grabbing' : 'grab') : 'not-allowed',
+    opacity: canDrag ? 1 : 0.8
   };
 
   const priorityClass = 
@@ -82,6 +94,8 @@ export default function KanbanBoardPage() {
   const [items, setItems] = useState<WorkItem[]>([]);
   const [projectId, setProjectId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [user, setUser] = useState<any>(null);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -89,25 +103,24 @@ export default function KanbanBoardPage() {
   );
 
   useEffect(() => {
+    const userData = localStorage.getItem('user');
+    if (userData) setUser(JSON.parse(userData));
     fetchInitialData();
   }, []);
 
   const fetchInitialData = async () => {
     try {
       setLoading(true);
-      // Fetch user's projects to get a project ID
       const projRes = await api.get('/projects');
       if (projRes.data.length > 0) {
         const pId = projRes.data[0].id;
         setProjectId(pId);
-        // Fetch board data
+        
         const boardRes = await api.get(`/projects/${pId}/work-items`);
-        // The API returns an array of work items
         let fetchedItems: WorkItem[] = [];
         if (Array.isArray(boardRes.data)) {
            fetchedItems = boardRes.data;
         } else if (boardRes.data && Array.isArray(boardRes.data.data)) {
-           // In case it's paginated
            fetchedItems = boardRes.data.data;
         }
         setItems(fetchedItems);
@@ -119,6 +132,11 @@ export default function KanbanBoardPage() {
     }
   };
 
+  const showError = (msg: string) => {
+    setErrorMsg(msg);
+    setTimeout(() => setErrorMsg(null), 5000);
+  };
+
   const handleDragEnd = async (event: DragEndEvent) => {
     const { active, over } = event;
     if (!over) return;
@@ -126,10 +144,8 @@ export default function KanbanBoardPage() {
     const activeId = active.id as string;
     const overId = over.id as string;
 
-    // Is it dropping over a column or an item?
     const isOverAColumn = COLUMNS.some(c => c.id === overId);
     
-    // Find active item
     const activeItem = items.find(i => i.id === activeId);
     if (!activeItem) return;
 
@@ -145,6 +161,18 @@ export default function KanbanBoardPage() {
     }
 
     if (activeItem.status !== newStatus) {
+      // ===== RBAC VALIDATION FRONTEND =====
+      if (user?.role === 'MEMBER') {
+        if (newStatus === 'DONE') {
+          showError('Quyền truy cập bị từ chối: Chỉ Reviewer/PM mới có quyền duyệt hoàn thành công việc (DONE).');
+          return;
+        }
+        if (activeItem.status === 'REVIEW' && newStatus === 'IN_PROGRESS') {
+          showError('Quyền truy cập bị từ chối: Chỉ Reviewer/PM mới có quyền Từ chối (Reject) bài nộp.');
+          return;
+        }
+      }
+
       // Optimistic update
       setItems(prev => prev.map(item => 
         item.id === activeId ? { ...item, status: newStatus } : item
@@ -153,22 +181,30 @@ export default function KanbanBoardPage() {
       // API Call
       try {
         await api.patch(`/work-items/${activeId}/status`, { status: newStatus });
-      } catch (e) {
+      } catch (e: any) {
         console.error('Update status failed', e);
-        // Revert on failure (simplified)
+        showError(e.response?.data?.message || 'Cập nhật trạng thái thất bại do thiếu quyền hạn.');
+        // Rollback
         fetchInitialData();
       }
     }
   };
 
   if (loading) return <div>Đang tải bảng Kanban...</div>;
-  if (!projectId) return <div className={styles.emptyState}>Không tìm thấy dự án nào. Vui lòng tạo dự án qua API trước.</div>;
+  if (!projectId) return <div className={styles.emptyState}>Không tìm thấy dự án nào.</div>;
 
   return (
     <div className={styles.container}>
       <header className={styles.header}>
         <h1 className={styles.title}>Bảng Kanban</h1>
       </header>
+
+      {/* Hiển thị Error Notification (Toast/Alert) */}
+      {errorMsg && (
+        <div className={styles.errorAlert}>
+          ⚠️ {errorMsg}
+        </div>
+      )}
       
       <DndContext 
         sensors={sensors} 
@@ -194,9 +230,8 @@ export default function KanbanBoardPage() {
                 >
                   <div className={styles.cardList}>
                     {columnItems.map(item => (
-                      <SortableItem key={item.id} item={item} />
+                      <SortableItem key={item.id} item={item} user={user} />
                     ))}
-                    {/* Empty drop zone placeholder */}
                     {columnItems.length === 0 && (
                       <div style={{ height: '40px' }} />
                     )}
