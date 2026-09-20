@@ -1,10 +1,10 @@
 FROM node:21-alpine AS base
-RUN npm install -g pnpm
+RUN npm install -g pnpm@8.15.5
 
 FROM base AS deps
 WORKDIR /app
 COPY package.json pnpm-lock.yaml ./
-RUN pnpm config set ignore-scripts false && pnpm install --frozen-lockfile
+RUN pnpm install --frozen-lockfile
 
 FROM base AS builder
 WORKDIR /app
