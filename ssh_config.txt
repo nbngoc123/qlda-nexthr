@@ -1,0 +1,14 @@
+# SSH Config cho Azure VM NextHR
+# Usage: ssh nexthr-vm
+
+Host nexthr-vm
+    HostName 20.196.64.64
+    User azureuser
+    IdentityFile C:\Users\ADMIN\.ssh\RIPT.pem
+    # Port forwarding: truy cập từ laptop
+    LocalForward 3000 localhost:3000
+    LocalForward 5432 localhost:5432
+    LocalForward 6379 localhost:6379
+    ServerAliveInterval 60
+    ServerAliveCountMax 3
+    StrictHostKeyChecking no
